@@ -1,0 +1,14 @@
+{
+  "experiment_id": 2,
+  "experiment_name": "lucy_bioprocess_analysis",
+  "description": "QGAN evaluation on Lucy bioprocess time series data",
+  "tags": [
+    "real_data",
+    "csv",
+    "evaluation"
+  ],
+  "created_at": "2025-06-09T19:40:08.083668",
+  "folder_path": "experiments/exp_0002_lucy_bioprocess_analysis",
+  "status": "created",
+  "results": {}
+}

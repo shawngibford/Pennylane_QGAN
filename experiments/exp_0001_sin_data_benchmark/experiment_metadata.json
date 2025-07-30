@@ -1,0 +1,14 @@
+{
+  "experiment_id": 1,
+  "experiment_name": "sin_data_benchmark",
+  "description": "Comprehensive benchmark test using 5-feature sinusoidal synthetic data",
+  "tags": [
+    "benchmark",
+    "synthetic",
+    "test"
+  ],
+  "created_at": "2025-06-09T19:12:46.285168",
+  "folder_path": "experiments/exp_0001_sin_data_benchmark",
+  "status": "created",
+  "results": {}
+}

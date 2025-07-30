@@ -1,0 +1,6 @@
+{
+  "length": 2000,
+  "window_size": 50,
+  "normalize": true,
+  "add_regime_changes": false
+}

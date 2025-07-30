@@ -1,0 +1,74 @@
+Creat a dir=ctionary of quantum circuits for n,..n+m qubits, [VUCCA, UCCA, IQP, Randomized to veriying lever=vs of complexity, entanglement and superpostion]
+
+def qgan class that takes in lists for objects and iterates over all permuations 
+
+once wights are found and sav no need for retraying at least in the future.
+
+#####
+This f=project file is an attempt to reimplamnet a paper by Orlandi, ill like latter. 
+
+His work was in financial data where is distribution what beautifully gauissian except
+for a few fat tais.
+
+He was about to caoture to much of this distribution it looked kind cool. 
+
+but then I had a thought, it will only work if the noise is quassian, the quantum circuit didn't acctually learn the parameters
+
+This makes me believe that is requires furth inverstigation into wheither or not his data and method are valid
+
+Data: we will need 9 large data sets, 3 with gaussian log-distribution, those wwith VERY NOT log-distributions, and 3 with a log distribution that is multimodl
+
+
+First:
+We will need to collect these 9 data sets and then confirm they meet the specifications
+
+Second:
+WE should have as many gerative models as possible in order to increase the statistics.
+
+Third:
+We are going to iterate over quantum circuits, as mentioned before
+You will need to find a test in order to measure the comploexity and entanglment of the circuit, which should be stored for later.
+
+Fourth:
+
+we are going to iterate over qubits.  while iterating over circuits we while then do the same wiith the number of qubits, again to be 
+stored for later comparision
+
+Fifth:
+
+we will iterate over layers of the quantum circuit. this will be difficult tiam time intensive.
+
+After all of this has been completed and all scores have been meaured, and all metrics looked at then we will impliment ZX calulus
+
+Here is the website and the documentation. 
+
+
+
+You are a quantum algorithm enginer and you would like to creat the most perfect synthic data known to man or machine... how would you do it? step by step, giving code examples.
+
+Please write all over your output to this is a .txt file in a clear and concise manner in the directory /Unk?
+
+Code for multi-circuit compairison - benchmark time strategies (find out max circuit complexity, entanglement, etc.)
+
+Code for multi-circuit comparision - benmark against multiple features (find out when features become too much)
+
+Whenever features are given in datasets, provide a correlation matrix, and other statsistical mesurments for analysing the data to make better, more informed decisions about about the pipeline later.
+
+Give this the option to run using multiple qubits. This way we have a comparision between qubit-number, circuit complexity, effect on feature learning, etc.
+
+No matter what, at the end of the experiment there needs to be a table that gives as many results as possible:
+
+i.e."qbuit count", circuit depth", 'gate count', 'single- qubit gates", please metrics like MSE, RMSE, R^2, KA score, KL divergence, and every other metric known to man to comapre the simililarity of two data sets; fake and historic.
+This will also need to compare different iterations of the above combinations of parameters, to hone in on the most generalizeable optimal parameters for the quantum gates and the discriminator. 
+
+Next point, the discriminator should also be set up such that it can self-iterate and make the results more accurate. 
+
+Now there are 2 things that I would like to happen:
+
+1. Once the historic data gets processed, using the method we designed, I would like to take the histogram of the historical data, and then use that as the "Gaussian" or "random Noise" used in the QGAN .
+
+2. Now, once that is done, I would like for you to take the latent space of the discriminator and feed that information to the latent space of the generator - allowing the Generator to learn from the "good" vs the "bad" data it produces.
+
+We call this a Quantum Wasserstein Generative Associative Network.
+
+These models should be able to iterate over there code, debug it, and improve scores on synthetic data generation, the randomized, complex circuit is just the benchmark.

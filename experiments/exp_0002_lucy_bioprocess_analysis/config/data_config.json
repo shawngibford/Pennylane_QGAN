@@ -1,0 +1,17 @@
+{
+  "original_file": "data/raw/lucy2.csv",
+  "feature_columns": [
+    "CELL",
+    "PAR_LIGHT",
+    "DO",
+    "PRE",
+    "OD"
+  ],
+  "normalize": true,
+  "data_shape": [
+    778,
+    5
+  ],
+  "total_samples": 778,
+  "features_selected": 5
+}

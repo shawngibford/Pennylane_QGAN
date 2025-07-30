@@ -1,0 +1,15 @@
+pennylane
+torch
+torchvision
+pandas
+numpy
+matplotlib
+seaborn
+scipy
+statsmodels
+fastdtw
+dtaidistance
+jupyter
+pytest
+black
+flake8 
