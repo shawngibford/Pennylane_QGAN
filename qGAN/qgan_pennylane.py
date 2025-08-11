@@ -1202,23 +1202,58 @@ generator_inputs = torch.stack([torch.tensor(noise, dtype=torch.float32) for noi
 # generate fake samples using the generator
 batch_generated = []
 
-for generator_input in generator_inputs:
-    generated_sample = qgan.generator(generator_input, qgan.params_pqc)
-    if isinstance(generated_sample, list):
-        generated_sample = torch.stack(generated_sample)
-    batch_generated.append(generated_sample.to(torch.float64))
+print(f"Generating {len(generator_inputs)} samples...")
+for i, generator_input in enumerate(generator_inputs):
+    with torch.no_grad():  # Disable gradients for generation
+        generated_sample = qgan.generator(generator_input, qgan.params_pqc)
+        if isinstance(generated_sample, list):
+            generated_sample = torch.stack(generated_sample)
+        batch_generated.append(generated_sample.to(torch.float64))
+    
+    # Debug print for first few samples
+    if i < 3:
+        sample_min, sample_max = generated_sample.min().item(), generated_sample.max().item()
+        print(f"Sample {i}: range [{sample_min:.6f}, {sample_max:.6f}]")
+
 batch_generated = torch.stack(batch_generated)
+print(f"Generated batch shape: {batch_generated.shape}")
+print(f"Generated batch range: [{batch_generated.min().item():.6f}, {batch_generated.max().item():.6f}]")
 
 # concatenate all time series data into one
 generated_data = torch.reshape(batch_generated, shape=(num_samples * WINDOW_LENGTH,))
 generated_data = generated_data.double()
+print(f"Reshaped data: {generated_data.shape}, range [{generated_data.min().item():.6f}, {generated_data.max().item():.6f}]")
+
+# Check for NaN/Inf before rescaling
+if torch.isnan(generated_data).any() or torch.isinf(generated_data).any():
+    print("❌ WARNING: Generated data contains NaN or Inf values before rescaling!")
+    print(f"NaN count: {torch.isnan(generated_data).sum().item()}")
+    print(f"Inf count: {torch.isinf(generated_data).sum().item()}")
 
 # rescale
-generated_data = rescale(generated_data, transformed_norm_OD_log_delta)
+generated_data_rescaled = rescale(generated_data, transformed_norm_OD_log_delta)
+print(f"After rescale: range [{generated_data_rescaled.min().item():.6f}, {generated_data_rescaled.max().item():.6f}]")
+
+# Check for NaN/Inf after rescaling
+if torch.isnan(generated_data_rescaled).any() or torch.isinf(generated_data_rescaled).any():
+    print("❌ WARNING: Data contains NaN or Inf values after rescaling!")
 
 # reverse the preprocessing on generated sample
-original_norm = lambert_w_transform(generated_data, 1)
+original_norm = lambert_w_transform(generated_data_rescaled, 1)
+print(f"After Lambert W: range [{original_norm.min().item():.6f}, {original_norm.max().item():.6f}]")
+
+# Check for NaN/Inf after Lambert W
+if torch.isnan(original_norm).any() or torch.isinf(original_norm).any():
+    print("❌ WARNING: Data contains NaN or Inf values after Lambert W transform!")
+
 fake_original = denormalize(original_norm, torch.mean(OD_log_delta), torch.std(OD_log_delta))
+print(f"Final fake_original: range [{fake_original.min().item():.6f}, {fake_original.max().item():.6f}]")
+
+# Final check
+if torch.isnan(fake_original).any() or torch.isinf(fake_original).any():
+    print("❌ ERROR: Final data contains NaN or Inf values!")
+else:
+    print("✅ Final data is valid (no NaN/Inf)")
 fig, axes = plt.subplots(nrows=1, ncols=2, figsize=(10,4))
 
 ###################################################################################################################
@@ -1249,17 +1284,36 @@ fake_data = pd.DataFrame({
     'Log_Return': fake_OD_log_delta_np.flatten()
 })
 
-# Plot using index on x-axis (no 'date' available) 
-axes[0].plot(OD_log_delta_np)
+# Debug data before plotting
+print(f"\nPlotting data:")
+print(f"Original data: {len(OD_log_delta_np)} points, range [{OD_log_delta_np.min():.6f}, {OD_log_delta_np.max():.6f}]")
+print(f"Generated data: {len(fake_OD_log_delta_np)} points, range [{fake_OD_log_delta_np.min():.6f}, {fake_OD_log_delta_np.max():.6f}]")
+
+# Check if data is constant
+if OD_log_delta_np.min() == OD_log_delta_np.max():
+    print("❌ WARNING: Original data is constant!")
+if fake_OD_log_delta_np.min() == fake_OD_log_delta_np.max():
+    print("❌ WARNING: Generated data is constant!")
+
+# Plot using index on x-axis with adaptive y-limits
+axes[0].plot(OD_log_delta_np, 'b-', linewidth=0.8, alpha=0.8)
 axes[0].set_xlabel('Days')
 axes[0].set_title('Original Log-Returns')
-axes[0].grid()
-axes[0].set_ylim([-0.1, 0.1])
-axes[1].plot(fake_OD_log_delta_np)
+axes[0].grid(True, alpha=0.3)
+# Use data-driven y-limits with some padding
+original_margin = (OD_log_delta_np.max() - OD_log_delta_np.min()) * 0.1
+axes[0].set_ylim([OD_log_delta_np.min() - original_margin, OD_log_delta_np.max() + original_margin])
+
+axes[1].plot(fake_OD_log_delta_np, 'r-', linewidth=0.8, alpha=0.8)
 axes[1].set_xlabel('Days')
 axes[1].set_title('Generated Log-Returns') 
-axes[1].grid()
-axes[1].set_ylim([-0.1, 0.1])
+axes[1].grid(True, alpha=0.3)
+# Use data-driven y-limits with some padding
+generated_margin = (fake_OD_log_delta_np.max() - fake_OD_log_delta_np.min()) * 0.1
+axes[1].set_ylim([fake_OD_log_delta_np.min() - generated_margin, fake_OD_log_delta_np.max() + generated_margin])
+
+print(f"Plot y-limits: Original [{OD_log_delta_np.min() - original_margin:.6f}, {OD_log_delta_np.max() + original_margin:.6f}]")
+print(f"Plot y-limits: Generated [{fake_OD_log_delta_np.min() - generated_margin:.6f}, {fake_OD_log_delta_np.max() + generated_margin:.6f}]")
 plt.show()
 
 
@@ -1275,14 +1329,24 @@ fig, axes = plt.subplots(nrows=1, ncols=2, figsize=(10,4))
 # plot histogram of generated along with original log-returns on the left and the Q-Q plot on the right
 #
 ###################################################################################################################
-bin_edges = np.linspace(-0.05, 0.05, num=50)  # define the bin edges
-bin_width = bin_edges[1] - bin_edges[0]
-bin_edges = np.append(bin_edges, bin_edges[-1] + bin_width)
+# Use adaptive bin ranges based on actual data
+combined_data = np.concatenate([OD_log_delta_np, fake_OD_log_delta_np])
+data_min, data_max = combined_data.min(), combined_data.max()
+data_range = data_max - data_min
+margin = data_range * 0.1  # 10% margin
+
+bin_min = data_min - margin
+bin_max = data_max + margin
+bin_edges = np.linspace(bin_min, bin_max, num=50)
+
+print(f"Histogram bin range: [{bin_min:.6f}, {bin_max:.6f}]")
+print(f"Data range: Original [{OD_log_delta_np.min():.6f}, {OD_log_delta_np.max():.6f}], Generated [{fake_OD_log_delta_np.min():.6f}, {fake_OD_log_delta_np.max():.6f}]")
 
 orig_hist_np = OD_log_delta.detach().cpu().numpy() if isinstance(OD_log_delta, torch.Tensor) else np.asarray(OD_log_delta)
 
-axes[0].hist(fake_OD_log_delta_np, bins=bin_edges, density=True, width=0.001, label='Generated', alpha=0.9)
-axes[0].hist(orig_hist_np, bins=bin_edges, density=True, width=0.001, label='Original', alpha=0.8)
+# Plot histograms with adaptive bins
+axes[0].hist(fake_OD_log_delta_np, bins=bin_edges, density=True, label='Generated', alpha=0.7, color='red')
+axes[0].hist(orig_hist_np, bins=bin_edges, density=True, label='Original', alpha=0.7, color='blue')
 axes[0].set_title('Original vs Generated Density')
 axes[0].grid()
 axes[0].legend()
