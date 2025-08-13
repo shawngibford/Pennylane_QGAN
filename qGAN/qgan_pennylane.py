@@ -82,16 +82,16 @@ fig, axes = plt.subplots(nrows=1, ncols=2, figsize=(15,5))
 
 # Plot direct returns
 axes[0].plot(time_index[1:], OD_delta_np)
-axes[0].set_title('Lucy Direct Returns')
+axes[0].set_title('OD $\delta$ ')
 axes[0].set_xlabel('Time Steps')
-axes[0].set_ylabel('Direct Returns')
+axes[0].set_ylabel('OD $\delta$')
 axes[0].grid(True)
 
 # Plot log returns
 axes[1].plot(time_index[1:], OD_log_delta_np)
-axes[1].set_title('Lucy Log Returns')
+axes[1].set_title('Log OD $\delta$')
 axes[1].set_xlabel('Time Steps')
-axes[1].set_ylabel('Log Returns')
+axes[1].set_ylabel('Log OD $\delta$')
 axes[1].grid(True)
 plt.tight_layout()
 plt.show()
@@ -238,7 +238,7 @@ print(f"First-order autocorrelation of absolute log returns: {acf_abs:.4f}")
 # Generate the Q-Q plot
 plt.figure(figsize=(6, 4))
 probplot(OD_log_delta, dist='norm', plot=plt)
-plt.title('Q-Q Plot - Lucy OD Log Returns')
+plt.title('Q-Q Plot -  Log OD $\delta$')
 plt.xlabel('Theoretical Quantiles')
 plt.ylabel('Sample Quantiles')
 plt.grid(True)
@@ -258,10 +258,10 @@ def denormalize(norm_data, mu_original, std_original):
 norm_OD_log_delta = normalize(OD_log_delta)
 
 # display the mean and standard deviation of the original log-returns
-print(f'Original Lucy OD log-returns mean = {torch.mean(OD_log_delta)}, std = {torch.std(OD_log_delta)}')
+print(f'Original Log OD $\delta$ mean = {torch.mean(OD_log_delta)}, std = {torch.std(OD_log_delta)}')
 
 # display the mean and standard deviation of the normalized log-returns
-print(f'Normalized Lucy OD log-returns mean = {torch.mean(norm_OD_log_delta)}, std = {torch.std(norm_OD_log_delta)}')
+print(f'Normalized Log OD $\delta$ mean = {torch.mean(norm_OD_log_delta)}, std = {torch.std(norm_OD_log_delta)}')
 
 
 
@@ -373,7 +373,7 @@ plt.show()
 # Generate the Q-Q plot
 plt.figure(figsize=(6, 4))
 probplot(transformed_norm_OD_log_delta, dist='norm', plot=plt)
-plt.title('Q-Q Plot - Transformed Lucy OD "Log Returns"')
+plt.title('Q-Q Plot - Transformed OD Log $\delta$')
 plt.xlabel('Theoretical Quantiles')
 plt.ylabel('Sample Quantiles')
 plt.grid(True)
@@ -655,8 +655,8 @@ class qGAN(nn.Module):
         """
         Parameters:
         - gan_data is the preprocessed dataset with windows for qGAN training
-        - original_data is the original S&P 500 log-returns for evaluation of RMSEs (monitoring purposes)
-        - preprocessed_data is the preprocessed log-returns without the last normalization step and without windows
+        - original_data is the original log OD $\delta$ for evaluation of RMSEs (monitoring purposes)
+        - preprocessed_data is the preprocessed log OD $\delta$ without the last normalization step and without windows
          (for reversing the process of generated samples using the mean and std and evaluating the RMSEs)
         """
         # Convert DataLoader to list for random sampling (PyTorch approach)
@@ -904,7 +904,7 @@ class qGAN(nn.Module):
 
     def stylized_facts(self, original_data, fake_original):
         """
-        - Calculate the RMSEs of the stylized facts between the original S&P 500 log-returns and
+        - Calculate the RMSEs of the stylized facts between the original log OD $\delta$ and
           generated time series
         - Evaluate the EMD between real and generated samples
         """
@@ -1442,9 +1442,7 @@ df.to_csv(csv_filename, index=False)
 
 df = pd.DataFrame(fake_original.detach().cpu().numpy())
 
-# Save the DataFrame to a CSV file
-csv_filename = 'fake_orignial_lucy_log_returns.csv'
-df.to_csv(csv_filename, index=False)
+
 
 # Save the DataFrame to a CSV file
 csv_filename = 'real.csv'
@@ -1462,15 +1460,15 @@ fake_ts = fake_data['Log_Return'][:min_length]
 # Generate QQ plots
 fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(18, 6))
 
-# QQ plot for the original Lucy log returns
+# QQ plot for the original  log OD $\delta$
 stats.probplot(real_ts, dist="norm", plot=ax1)
-ax1.set_title('QQ Plot of Original Lucy Log Returns', fontsize= 18)
+ax1.set_title('QQ Plot of Original Log OD $\delta$', fontsize= 18)
 ax1.grid(True)
 
-# QQ plot for the generated Lucy log returns
+# QQ plot for the generated  log OD $\delta$
 stats.probplot(fake_ts, dist="norm", plot=ax2)
 ax2.get_lines()[0].set_color('orange')
-ax2.set_title('QQ Plot of Generated Lucy Log Returns', fontsize= 18)
+ax2.set_title('QQ Plot of Generated Log OD $\delta$', fontsize= 18)
 ax2.grid(True)
 
 # Set the same scale for y axis
@@ -1495,11 +1493,11 @@ fake_ts_cdf = np.cumsum(fake_ts_values * np.diff(fake_ts_base))
 
 # Plotting the probability distributions of the real and fake time series
 plt.figure(figsize=(12, 6))
-plt.plot(real_ts_base[:-1], real_ts_cdf, label='CDF of Original Lucy Log Returns', color='blue')
-plt.plot(fake_ts_base[:-1], fake_ts_cdf, label='CDF of Generated Lucy Log Returns', color='orange')
-plt.xlabel('Log Return Value',fontsize=14)
+plt.plot(real_ts_base[:-1], real_ts_cdf, label='CDF of Original Log OD $\delta$', color='blue')
+plt.plot(fake_ts_base[:-1], fake_ts_cdf, label='CDF of Generated Log OD $\delta$', color='orange')
+plt.xlabel('Log OD $\delta$ Value',fontsize=14)
 plt.ylabel('Cumulative Distribution Function',fontsize=14)
-plt.title('CDF of Original vs. Generated Lucy Log Returns',fontsize=18)
+plt.title('CDF of Original vs. Generated Log OD $\delta$',fontsize=18)
 plt.legend(loc='upper left')
 plt.grid(True)
 plt.show()
@@ -1517,19 +1515,19 @@ max_log_return = max(real_data['Log_Return'].max(), fake_data['Log_Return'].max(
 # Plot both time series with the same y-axis scale
 plt.figure(figsize=(20, 5))
 
-# Plotting the original S&P 500 Log Returns
+# Plotting the original Log OD $\delta$
 plt.subplot(1, 2, 1)
 plt.plot(real_data['DATE'], real_data['Log_Return'], color='blue')
-plt.title('Original Lucy Log Returns',fontsize=18)
+plt.title('Original Log OD $\delta$',fontsize=18)
 plt.xlabel('Date',fontsize=14)
-plt.ylabel('Log Return',fontsize=14)
+plt.ylabel('Log OD $\delta$',fontsize=14)
 plt.ylim(min_log_return, max_log_return)
 plt.grid(True)
 
-# Plotting the generated S&P 500 Log Returns
+# Plotting the generated Log OD $\delta$
 plt.subplot(1, 2, 2)
 plt.plot(fake_data['DATE'], fake_data['Log_Return'], color='orange')
-plt.title('Generated Lucy Log Returns',fontsize=18)
+plt.title('Generated Log OD $\delta$',fontsize=18)
 plt.xlabel('Date',fontsize=14)
 plt.ylim(min_log_return, max_log_return)
 plt.grid(True)
@@ -1543,24 +1541,24 @@ plt.show()
 # We will use seaborn's distplot to plot the PDFs of the real and fake data
 plt.figure(figsize=(12, 6))
 
-# Plotting the PDF of the original S&P 500 Log Returns
+# Plotting the PDF of the original log OD $\delta$
 sns.distplot(real_ts, hist=False, kde=True,
              bins=100, color = 'blue',
              hist_kws={'edgecolor':'black'},
              kde_kws={'linewidth': 4},
-             label='Original Lucy')
+             label='Original Log OD $\delta$')
 
-# Plotting the PDF of the generated S&P 500 Log Returns
+# Plotting the PDF of the generated log OD $\delta$
 sns.distplot(fake_ts, hist=False, kde=True,
              bins=100, color = 'orange',
              hist_kws={'edgecolor':'black'},
              kde_kws={'linewidth': 4},
-             label='Generated Lucy')
+             label='Generated Log OD $\delta$')
 
 # Plot formatting
 plt.legend(prop={'size': 10}, title = 'PDF')
-plt.title('PDF of Original vs. Generated Lucy Log Returns', fontsize = 18)
-plt.xlabel('Log Return', fontsize = 14)
+plt.title('PDF of Original vs. Generated Log OD $\delta$', fontsize = 18)
+plt.xlabel('Log OD $\delta$', fontsize = 14)
 plt.ylabel('Density', fontsize = 14)
 plt.grid(True)
 
@@ -1592,13 +1590,13 @@ fig, axes = plt.subplots(nrows=1, ncols=2, figsize=(16, 4))
 # Plot autocorrelations of original log-returns on the left
 tsaplots.plot_acf(real_ts, ax=axes[0], lags=30, zero=False)
 axes[0].set_xlabel('Lags', fontsize = 14)
-axes[0].set_title('ACF for Original Lucy Log Returns', fontsize = 16)
+axes[0].set_title('ACF for Original Log OD $\delta$', fontsize = 16)
 axes[0].grid()
 
 # Plot autocorrelations of generated log-returns on the right
 tsaplots.plot_acf(fake_ts, ax=axes[1], lags=30, zero=False, color='orange')
 axes[1].set_xlabel('Lags', fontsize = 14)
-axes[1].set_title('ACF for Generated Lucy Returns', fontsize = 16)
+axes[1].set_title('ACF for Generated OD $\delta$', fontsize = 16)
 axes[1].grid()
 
 plt.show()
@@ -1632,13 +1630,13 @@ plt.show()
 
 plt.figure(figsize=(12, 6))
 
-# Plotting the histogram for the original S&P 500 Log Returns
+# Plotting the histogram for the original OD $\delta$
 plt.hist(real_ts, bins=100, alpha=0.7, label='Original OD', color='blue', density = True)
 
-# Plotting the histogram for the generated S&P 500 Log Returns
+# Plotting the histogram for the generated Log OD $\delta$
 plt.hist(fake_ts, bins=100, alpha=0.7, label='Generated OD', color='orange', density = True)
 
-plt.xlabel('Log Return', fontsize = 14)
+plt.xlabel('Log OD $\delta$', fontsize = 14)
 plt.ylabel('Density', fontsize = 14)
 plt.title('Histogram of Original vs. Generated OD Log Returns', fontsize = 18)
 plt.legend(loc='upper right')
@@ -1651,13 +1649,13 @@ plt.figure(figsize=(12, 6))
 bin_edges = np.linspace(-0.05, 0.05, num=50)  # define the bin edges
 bin_width = bin_edges[1] - bin_edges[0]
 bin_edges = np.append(bin_edges, bin_edges[-1] + bin_width)
-# Plotting the histogram for the original S&P 500 Log Returns
+# Plotting the histogram for the original Log OD $\delta$
 plt.hist(real_ts, bins=bin_edges, alpha=0.7, label='Original OD', color='blue')
 
-# Plotting the histogram for the generated S&P 500 Log Returns
-plt.hist(fake_ts, bins=bin_edges, alpha=0.7, label='Generated Brasilian Stock Index', color='orange')
+# Plotting the histogram for the generated Log OD $\delta$
+plt.hist(fake_ts, bins=bin_edges, alpha=0.7, label='Generated OD', color='orange')
 
-plt.xlabel('Log Return')
+plt.xlabel('Log OD $\delta$')
 plt.ylabel('Frequency')
 plt.title('Histogram of Original vs. Generated OD Returns')
 plt.legend(loc='upper right')
