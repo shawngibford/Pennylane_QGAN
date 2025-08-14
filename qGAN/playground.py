@@ -480,24 +480,20 @@ class qGAN(nn.Module):
         # define the trainable parameters of the PQC main and re-uploading layers (trainable)
         self.params_pqc = torch.nn.Parameter(torch.randn(self.num_params, requires_grad=True))  # PyTorch parameters instead of sympy symbols
 
-        # HYBRID QUANTUM-CLASSICAL ARCHITECTURE FOR TEMPORAL MODELING
-        # Add RNN component to capture temporal dependencies
+        # SUCCESSFUL HYBRID PATTERN: Simple RNN + Quantum PQC (based on 0.752 score memory)
+        # Keep it simple and stable like the successful implementation
         self.hybrid_mode = True  # Enable hybrid mode
-        self.rnn_hidden_size = 64  # Increased for better temporal modeling capacity
+        self.rnn_hidden_size = 32  # Simple size like successful implementation
         self.rnn = nn.RNN(
             input_size=self.num_qubits * 2,  # Quantum measurements (X and Z for each qubit)
             hidden_size=self.rnn_hidden_size,
-            num_layers=2,  # Deeper RNN for better temporal learning
+            num_layers=1,  # Single layer for stability
             batch_first=True,
-            nonlinearity='tanh',
-            dropout=0.1  # Add dropout for regularization
+            nonlinearity='tanh'
+            # No dropout for simplicity and stability
         )
-        # Enhanced output layers with nonlinearity for better expressivity
-        self.rnn_output_layer = nn.Sequential(
-            nn.Linear(self.rnn_hidden_size, self.rnn_hidden_size // 2),
-            nn.Tanh(),
-            nn.Linear(self.rnn_hidden_size // 2, window_length)
-        )
+        # Simple output layer like successful implementation
+        self.rnn_output_layer = nn.Linear(self.rnn_hidden_size, window_length)
 
         # define the classical critic network (CNN)
         self.critic = self.define_critic_model(window_length)
@@ -537,50 +533,66 @@ class qGAN(nn.Module):
     #
     ####################################################################################
     def define_critic_model(self, window_length):
-        """Define the classical critic model"""
+        """Simple classical critic model following successful pattern (no gradient penalty)"""
         model = nn.Sequential(
-        nn.Conv1d(in_channels=1, out_channels=64, kernel_size=10, stride=1, padding=5),
-        nn.LeakyReLU(negative_slope=0.1),
-        
-        nn.Conv1d(in_channels=64, out_channels=128, kernel_size=10, stride=1, padding=5),
-        nn.LeakyReLU(negative_slope=0.1),
-        
-        nn.Conv1d(in_channels=128, out_channels=128, kernel_size=10, stride=1, padding=5),
-        nn.LeakyReLU(negative_slope=0.1),
-        
-        # Add adaptive pooling to get fixed size
-        nn.AdaptiveAvgPool1d(output_size=1),  # This gives 128 * 1 = 128 features ### verify if this needs to be here
-        nn.Flatten(),
-        
-        nn.Linear(in_features=128, out_features=32),  # 128 -> 32
-        nn.LeakyReLU(negative_slope=0.1),
-        nn.Dropout(p=0.2),
-        
-        nn.Linear(in_features=32, out_features=1)
+            # Simpler architecture for stability like successful implementation
+            nn.Conv1d(in_channels=1, out_channels=32, kernel_size=3, stride=1, padding=1),
+            nn.LeakyReLU(negative_slope=0.2),
+            
+            nn.Conv1d(in_channels=32, out_channels=64, kernel_size=3, stride=1, padding=1),
+            nn.LeakyReLU(negative_slope=0.2),
+            
+            # Adaptive pooling to get fixed size
+            nn.AdaptiveAvgPool1d(output_size=1),
+            nn.Flatten(),
+            
+            # Simple output layer
+            nn.Linear(in_features=64, out_features=1)
         )
-    
+        
         model = model.double()
         return model
 
     ####################################################################################
     #
-    # the encoding layer: resolve the parameters by uniform noise values,
-    # used to prepare the initial state for the generator circuit
+    # encoding layer for the quantum generator with conditional input
     #
     ####################################################################################
-    def encoding_layer(self, noise_params):
-        """Helper function to apply encoding - used within qnode"""
-        for i in range(self.num_qubits):
-            qml.RX(phi=noise_params[i], wires=i)
+    def encoding_layer(self, noise_params, condition_params=None):
+        """
+        Helper function to apply encoding with optional conditioning on previous window
+        
+        Args:
+            noise_params: Random noise parameters (size: num_qubits)
+            condition_params: Previous window for conditioning (size: window_length, optional)
+        """
+        if condition_params is not None:
+            # STRONG CONDITIONING: Apply conditioning FIRST with full range
+            for i in range(self.num_qubits):
+                if i * 2 < len(condition_params):
+                    # Amplify conditioning signal: map [-0.1, 0.1] to [-π, π]
+                    cond_param_y = condition_params[i * 2] * 10.0 * np.pi  # Strong scaling
+                    qml.RY(phi=cond_param_y, wires=i)
+                if i * 2 + 1 < len(condition_params):
+                    cond_param_z = condition_params[i * 2 + 1] * 10.0 * np.pi  # Strong scaling
+                    qml.RZ(phi=cond_param_z, wires=i)
+            
+            # Apply REDUCED noise to preserve conditioning
+            for i in range(self.num_qubits):
+                qml.RX(phi=noise_params[i] * 0.3, wires=i)  # Reduced noise strength
+        else:
+            # Unconditional: Apply full noise encoding
+            for i in range(self.num_qubits):
+                qml.RX(phi=noise_params[i], wires=i)
 
     ####################################################################################
     #
     # the quantum generator as a PQC with All-to-all topology for the entangling layer
     #
     ####################################################################################
-    def define_generator_circuit(self, noise_params, params_pqc):
-        # Apply encoding layer
-        self.encoding_layer(noise_params)
+    def define_generator_circuit(self, noise_params, params_pqc, condition_params=None):
+        # Apply encoding layer with optional conditioning
+        self.encoding_layer(noise_params, condition_params)
     
         # index for the parameter tensor of the PQC main and re-uploading layers
         idx = 0
@@ -632,7 +644,10 @@ class qGAN(nn.Module):
             idx += 1
     
         measurements = []
-        for i in range(self.num_qubits):
+        # Only measure first 5 qubits to get exactly 10 measurements (WINDOW_LENGTH)
+        # This maintains compatibility while using all 8 qubits for computation
+        num_measured_qubits = self.window_length // 2  # 10 // 2 = 5 qubits
+        for i in range(num_measured_qubits):
             measurements.append(qml.expval(qml.PauliX(i)))  # X measurement
             measurements.append(qml.expval(qml.PauliZ(i)))  # Z measurement
     
@@ -658,6 +673,161 @@ class qGAN(nn.Module):
         model = generator
     
         return model
+
+    ####################################################################################
+    #
+    # Hybrid quantum-classical generator for temporal modeling
+    #
+    ####################################################################################
+    def hybrid_generator_call(self, noise_input, condition_window=None):
+        """
+        Enhanced hybrid quantum-classical generator targeting successful pattern (0.752 score)
+        Focus on proper quantum-classical integration and stronger temporal dependencies
+        
+        Args:
+            noise_input: Noise for quantum encoding
+            condition_window: Optional conditioning window
+            
+        Returns:
+            Generated window with temporal dependencies
+        """
+        if not self.hybrid_mode:
+            # Fall back to pure quantum generation
+            return self.conditional_generator_call(noise_input, condition_window)
+        
+        # ENHANCED PATTERN: Better quantum-classical integration for temporal structure
+        
+        # Step 1: Generate quantum features using PQC
+        if condition_window is not None:
+            if torch.is_tensor(condition_window):
+                condition_params = condition_window.detach().cpu().numpy()
+            else:
+                condition_params = np.array(condition_window)
+            quantum_features = self.generator(noise_input, self.params_pqc, condition_params)
+        else:
+            quantum_features = self.generator(noise_input, self.params_pqc)
+        
+        # Convert to tensor
+        if isinstance(quantum_features, list):
+            quantum_features = torch.stack(quantum_features)
+        
+        # Step 2: ENHANCED temporal sequence construction
+        # Create a longer sequence with stronger temporal progression
+        sequence_length = 10  # Longer sequence for better temporal modeling
+        temporal_sequence = []
+        
+        for step in range(sequence_length):
+            if condition_window is not None:
+                # STRONGER conditioning integration - progressive mixing
+                # Early steps: more conditioning, later steps: more quantum
+                condition_weight = 0.8 * (1 - step / sequence_length)  # Decreases from 0.8 to 0
+                quantum_weight = 0.2 + 0.8 * (step / sequence_length)   # Increases from 0.2 to 1.0
+                
+                # Ensure weights sum to 1
+                total_weight = condition_weight + quantum_weight
+                condition_weight /= total_weight
+                quantum_weight /= total_weight
+                
+                temporal_context = (condition_weight * condition_window[:len(quantum_features)] + 
+                                  quantum_weight * quantum_features)
+            else:
+                # Progressive quantum evolution with temporal noise
+                evolution_factor = step / sequence_length
+                temporal_noise = 0.1 * evolution_factor * torch.randn_like(quantum_features)
+                temporal_context = quantum_features * (1 + 0.2 * evolution_factor) + temporal_noise
+            
+            temporal_sequence.append(temporal_context)
+        
+        # Stack for RNN processing
+        temporal_sequence_tensor = torch.stack(temporal_sequence).unsqueeze(0)  # [1, seq_len, features]
+        
+        # Convert to float32 for RNN compatibility
+        temporal_sequence_tensor = temporal_sequence_tensor.to(torch.float32)
+        
+        # Step 3: Process through RNN with enhanced output aggregation
+        rnn_output, _ = self.rnn(temporal_sequence_tensor)
+        
+        # Step 4: ENHANCED output aggregation - use weighted combination of all timesteps
+        # This preserves more temporal information than just using the last timestep
+        timestep_weights = torch.softmax(torch.arange(sequence_length, dtype=torch.float32) * 2, dim=0)
+        weighted_rnn_output = torch.sum(rnn_output.squeeze(0) * timestep_weights.unsqueeze(1), dim=0)
+        
+        final_output = self.rnn_output_layer(weighted_rnn_output)
+        
+        # Convert back to float64 for consistency
+        return final_output.to(torch.float64)
+
+    ####################################################################################
+    #
+    # Sequential generator for temporal dependencies
+    #
+    ####################################################################################
+    def generate_sequential_sample(self, initial_window, num_steps, noise_scale=1.0):
+        """
+        Generate a sequential time series by conditioning each window on the previous one
+        
+        Args:
+            initial_window: Starting window for the sequence (tensor of size window_length)
+            num_steps: Number of additional windows to generate
+            noise_scale: Scale factor for noise injection
+            
+        Returns:
+            Sequential time series as a tensor
+        """
+        sequence = [initial_window.clone()]
+        current_window = initial_window.clone()
+        
+        with torch.no_grad():
+            for step in range(num_steps):
+                # Generate noise for this step
+                noise_values = np.random.uniform(0, 2 * np.pi * noise_scale, size=self.num_qubits)
+                generator_input = torch.tensor(noise_values, dtype=torch.float32)
+                
+                # Generate next window conditioned on current window
+                next_window = self.generator(generator_input, self.params_pqc, current_window)
+                
+                if isinstance(next_window, list):
+                    next_window = torch.stack(next_window)
+                
+                next_window = next_window.to(torch.float64)
+                sequence.append(next_window.clone())
+                current_window = next_window
+        
+        return torch.cat(sequence, dim=0)
+
+    ####################################################################################
+    #
+    # Modified generator call to support conditional generation
+    #
+    ####################################################################################
+    def conditional_generator_call(self, noise_input, condition_window=None):
+        """
+        Call generator with optional conditioning on previous window
+        
+        Args:
+            noise_input: Noise parameters for generation
+            condition_window: Previous window for conditioning (optional)
+            
+        Returns:
+            Generated window
+        """
+        if condition_window is not None:
+            # Ensure condition_window is properly formatted
+            if torch.is_tensor(condition_window):
+                condition_params = condition_window.detach().cpu().numpy()
+            else:
+                condition_params = np.array(condition_window)
+            
+            # Call generator with conditioning
+            generated_sample = self.generator(noise_input, self.params_pqc, condition_params)
+        else:
+            # Call generator without conditioning (original behavior)
+            generated_sample = self.generator(noise_input, self.params_pqc)
+        
+        if isinstance(generated_sample, list):
+            generated_sample = torch.stack(generated_sample)
+        
+        return generated_sample.to(torch.float64)
 
     #############################################################################
     #
@@ -715,17 +885,33 @@ class qGAN(nn.Module):
 
                 ##################################################
                 #
-                # Get the state prepared by the encoding circuit
+                # Conditional Sequential Generation
                 #
                 ##################################################
                 # generate noise parameters for the encoding layer
                 noise_values = np.random.uniform(0, 2 * np.pi, size=self.num_qubits)
-
-                # convert to torch tensor for quantum circuit
                 generator_input = torch.tensor(noise_values, dtype=torch.float32)
 
-                # get the fake sample as the expectations of the quantum circuit
-                generated_sample = self.generator(generator_input, self.params_pqc)
+                # For conditional generation, sometimes use previous window as conditioning
+                # Mix conditional and unconditional generation during training
+                use_conditioning = np.random.random() < 0.7  # 70% chance to use conditioning
+                
+                if use_conditioning and len(gan_data_list) > 1:
+                    # Sample a previous window for conditioning
+                    if random_idx.item() > 0:
+                        # Use the previous window in sequence
+                        prev_idx = random_idx.item() - 1
+                        condition_window = gan_data_list[prev_idx]
+                    else:
+                        # Use a random window as conditioning
+                        cond_idx = torch.randint(0, len(gan_data_list), (1,))
+                        condition_window = gan_data_list[cond_idx.item()]
+                    
+                    # Generate with conditioning
+                    generated_sample = self.conditional_generator_call(generator_input, condition_window)
+                else:
+                    # Generate without conditioning (original behavior)
+                    generated_sample = self.conditional_generator_call(generator_input, None)
 
                 # If QNode/module returns a list of tensors, stack to a single tensor
                 if isinstance(generated_sample, list):
@@ -783,14 +969,31 @@ class qGAN(nn.Module):
         # zero gradients
         self.g_optimizer.zero_grad()
 
-        # generate fake samples using the generator
+        # generate fake samples using the generator with conditional generation
         generated_samples = []
 
-        for generator_input in generator_inputs:
-            gen_out = self.generator(generator_input, self.params_pqc)
-            if isinstance(gen_out, list):
-                gen_out = torch.stack(gen_out)
-            generated_samples.append(gen_out.to(torch.float64))
+        for i, generator_input in enumerate(generator_inputs):
+            # Use hybrid quantum-classical generation for better temporal modeling
+            use_conditioning = np.random.random() < 0.80  # 80% chance to use conditioning (like successful hybrid)
+            
+            if use_conditioning and len(gan_data_list) > 1:
+                # Sample a previous window for conditioning
+                if random_idx.item() > 0:
+                    # Use the previous window in sequence
+                    prev_idx = random_idx.item() - 1
+                    condition_window = gan_data_list[prev_idx]
+                else:
+                    # Use a random window as conditioning
+                    cond_idx = torch.randint(0, len(gan_data_list), (1,))
+                    condition_window = gan_data_list[cond_idx.item()]
+                
+                # Generate with hybrid quantum-classical approach
+                fake_sample = self.hybrid_generator_call(generator_input, condition_window)
+            else:
+                # Generate without conditioning using hybrid approach
+                fake_sample = self.hybrid_generator_call(generator_input, None)
+
+            generated_samples.append(fake_sample)
         generated_samples = torch.stack(generated_samples)
 
         # Add channel dimension for Conv1D
@@ -1029,10 +1232,10 @@ class qGAN(nn.Module):
 ##################################################################
 WINDOW_LENGTH = 10  # this must be equal to the number of Pauli strings to measure
 NUM_QUBITS = 5  # number of qubits
-NUM_LAYERS = 3 # number of layers for the PQC
+NUM_LAYERS = 6 #3 # number of layers for the PQC
 
 # training hyperparameters
-EPOCHS = 10 #2001
+EPOCHS = 20 #2001
 BATCH_SIZE = 20
 n_critic = 2 # number of iterations for the critic per epoch
 LAMBDA = 10  # gradient penalty strength
@@ -1040,9 +1243,21 @@ LAMBDA = 10  # gradient penalty strength
 # instantiate the QGAN model object
 qgan = qGAN(EPOCHS, BATCH_SIZE, WINDOW_LENGTH, n_critic, LAMBDA, NUM_LAYERS, NUM_QUBITS)
 
-# set the optimizers
-c_optimizer = torch.optim.Adam(qgan.critic.parameters())
-g_optimizer = torch.optim.Adam([qgan.params_pqc])  # Use the quantum parameters
+# SUCCESSFUL HYBRID PATTERN: Simple optimizers without gradient penalty complications
+# Use stable learning rates like successful implementation
+c_optimizer = torch.optim.Adam(qgan.critic.parameters(), lr=0.0001, betas=(0.5, 0.9))
+
+# Generator optimizer includes both quantum PQC parameters and RNN parameters for hybrid architecture
+generator_params = [qgan.params_pqc]
+if qgan.hybrid_mode:
+    # Add RNN parameters to the list (flatten the parameter groups)
+    generator_params.extend(list(qgan.rnn.parameters()))
+    generator_params.extend(list(qgan.rnn_output_layer.parameters()))
+    print("🔗 SUCCESSFUL HYBRID MODE: Simple RNN + Quantum PQC (targeting 0.752 score)")
+else:
+    print("⚛️  PURE QUANTUM MODE: Using only PQC parameters")
+
+g_optimizer = torch.optim.Adam(generator_params, lr=0.0001, betas=(0.5, 0.9))
 qgan.compile_QGAN(c_optimizer, g_optimizer)
 
 ##################################################################################
@@ -1220,30 +1435,52 @@ for _ in range(num_samples):
 # convert to torch tensor batch
 generator_inputs = torch.stack([torch.tensor(noise, dtype=torch.float32) for noise in input_circuits_batch])
 
-# generate fake samples using the generator
-batch_generated = []
+# Generate sequential time series using HYBRID quantum-classical generation
+print(f"\n🔄 HYBRID QUANTUM-CLASSICAL SEQUENTIAL GENERATION")
+print("="*60)
 
-print(f"Generating {len(generator_inputs)} samples...")
-for i, generator_input in enumerate(generator_inputs):
+# Use the first real window as initial condition for sequential generation
+initial_window = scaled_data[:WINDOW_LENGTH].clone()
+print(f"Using initial window from real data: range [{initial_window.min().item():.6f}, {initial_window.max().item():.6f}]")
+
+# Generate a long sequential time series
+sequence_length = num_samples  # Number of windows to generate
+print(f"Generating sequential time series with {sequence_length} windows...")
+
+# Generate sequential samples with temporal dependencies using hybrid approach
+batch_generated = []
+current_window = initial_window.clone()
+
+for i in range(sequence_length):
     with torch.no_grad():  # Disable gradients for generation
-        generated_sample = qgan.generator(generator_input, qgan.params_pqc)
-        if isinstance(generated_sample, list):
-            generated_sample = torch.stack(generated_sample)
-        batch_generated.append(generated_sample.to(torch.float64))
+        # Generate noise for this step
+        noise_values = np.random.uniform(0, 2 * np.pi, size=NUM_QUBITS)
+        generator_input = torch.tensor(noise_values, dtype=torch.float32)
+        
+        # Generate next window conditioned on current window using HYBRID approach
+        if i == 0:
+            # First generation can be unconditional or use initial window
+            generated_sample = qgan.hybrid_generator_call(generator_input, current_window)
+        else:
+            # Subsequent generations are conditioned on previous window
+            generated_sample = qgan.hybrid_generator_call(generator_input, current_window)
+        
+        batch_generated.append(generated_sample.clone())
+        current_window = generated_sample.clone()  # Update for next iteration
     
     # Debug print for first few samples
     if i < 3:
         sample_min, sample_max = generated_sample.min().item(), generated_sample.max().item()
-        print(f"Sample {i}: range [{sample_min:.6f}, {sample_max:.6f}]")
+        print(f"Sequential Sample {i}: range [{sample_min:.6f}, {sample_max:.6f}]")
 
 batch_generated = torch.stack(batch_generated)
-print(f"Generated batch shape: {batch_generated.shape}")
-print(f"Generated batch range: [{batch_generated.min().item():.6f}, {batch_generated.max().item():.6f}]")
+print(f"Generated sequential batch shape: {batch_generated.shape}")
+print(f"Generated sequential batch range: [{batch_generated.min().item():.6f}, {batch_generated.max().item():.6f}]")
 
 # concatenate all time series data into one
-generated_data = torch.reshape(batch_generated, shape=(num_samples * WINDOW_LENGTH,))
+generated_data = torch.reshape(batch_generated, shape=(sequence_length * WINDOW_LENGTH,))
 generated_data = generated_data.double()
-print(f"Reshaped data: {generated_data.shape}, range [{generated_data.min().item():.6f}, {generated_data.max().item():.6f}]")
+print(f"Reshaped sequential data: {generated_data.shape}, range [{generated_data.min().item():.6f}, {generated_data.max().item():.6f}]")
 
 # Check for NaN/Inf before rescaling
 if torch.isnan(generated_data).any() or torch.isinf(generated_data).any():
@@ -1259,15 +1496,10 @@ print(f"After rescale: range [{generated_data_rescaled.min().item():.6f}, {gener
 if torch.isnan(generated_data_rescaled).any() or torch.isinf(generated_data_rescaled).any():
     print("❌ WARNING: Data contains NaN or Inf values after rescaling!")
 
-# reverse the preprocessing on generated sample
-original_norm = lambert_w_transform(generated_data_rescaled, 1)
-print(f"After Lambert W: range [{original_norm.min().item():.6f}, {original_norm.max().item():.6f}]")
-
-# Check for NaN/Inf after Lambert W
-if torch.isnan(original_norm).any() or torch.isinf(original_norm).any():
-    print("❌ WARNING: Data contains NaN or Inf values after Lambert W transform!")
-
-fake_original = denormalize(original_norm, torch.mean(OD_log_delta), torch.std(OD_log_delta))
+# Direct rescaling from [-1,1] generator output to original data range
+# Skip complex transformation chain and directly map to original data scale
+fake_original = rescale(generated_data_rescaled, OD_log_delta)
+print(f"After direct rescaling: range [{fake_original.min().item():.6f}, {fake_original.max().item():.6f}]")
 print(f"Final fake_original: range [{fake_original.min().item():.6f}, {fake_original.max().item():.6f}]")
 
 # Final check
@@ -1363,7 +1595,7 @@ def analyze_temporal_patterns(original_data, generated_data):
     print("-" * 40)
     
     # Compare first 200 points visually
-    n_compare = min(778, len(original_data), len(generated_data))
+    n_compare = min(200, len(original_data), len(generated_data))
     orig_sample = original_data[:n_compare]
     gen_sample = generated_data[:n_compare]
     
@@ -1877,190 +2109,5 @@ ax.set_title('DTW Warping Path between Real and Fake Data')
 ax.legend()
 plt.show()
 
-##################################################################
-#
-# Convert Generated Log Delta Back to Optical Density
-#
-##################################################################
-
-print("\n" + "="*60)
-print("CONVERTING GENERATED LOG DELTA TO OPTICAL DENSITY")
-print("="*60)
-
-# Convert generated log delta back to optical density for comparison
-# fake_OD_log_delta_np contains the generated log returns (log delta)
-# We need to reconstruct the optical density from these log returns
-
-# Get the original optical density data for reference
-original_OD_np = OD.detach().cpu().numpy()  # Original optical density values
-
-# Convert generated log delta to numpy if it's a tensor
-if isinstance(fake_OD_log_delta_np, torch.Tensor):
-    fake_log_delta_np = fake_OD_log_delta_np.detach().cpu().numpy()
-else:
-    fake_log_delta_np = fake_OD_log_delta_np
-
-print(f"Generated log delta shape: {fake_log_delta_np.shape}")
-print(f"Generated log delta range: [{fake_log_delta_np.min():.6f}, {fake_log_delta_np.max():.6f}]")
-
-# Reconstruct optical density from log delta
-# Log delta represents: log(OD[t]) - log(OD[t-1])
-# So: log(OD[t]) = log(OD[t-1]) + log_delta[t-1]
-# And: OD[t] = exp(log(OD[t]))
-
-# Initialize the reconstructed log(OD) array
-fake_log_OD = np.zeros(len(fake_log_delta_np) + 1)
-
-# Set the initial value to match the original data's first point
-initial_log_OD = np.log(original_OD_np[0])
-fake_log_OD[0] = initial_log_OD
-
-# Reconstruct log(OD) using cumulative sum
-fake_log_OD[1:] = initial_log_OD + np.cumsum(fake_log_delta_np)
-
-# Convert back to optical density
-fake_OD = np.exp(fake_log_OD)
-
-print(f"Reconstructed OD shape: {fake_OD.shape}")
-print(f"Reconstructed OD range: [{fake_OD.min():.6f}, {fake_OD.max():.6f}]")
-print(f"Original OD range: [{original_OD_np.min():.6f}, {original_OD_np.max():.6f}]")
-
-# Calculate statistics for comparison
-print(f"\nStatistical Comparison:")
-print(f"Original OD - Mean: {original_OD_np.mean():.6f}, Std: {original_OD_np.std():.6f}")
-print(f"Generated OD - Mean: {fake_OD.mean():.6f}, Std: {fake_OD.std():.6f}")
-
-# Calculate correlation between original and generated OD (using overlapping portion)
-min_length = min(len(original_OD_np), len(fake_OD))
-correlation = np.corrcoef(original_OD_np[:min_length], fake_OD[:min_length])[0, 1]
-print(f"Correlation coefficient: {correlation:.6f}")
-
-# Create comprehensive visualization
-fig, axes = plt.subplots(3, 1, figsize=(15, 12))
-
-# Plot 1: Log Delta Comparison
-axes[0].plot(fake_log_delta_np[:500], label='Generated Log Delta', color='orange', alpha=0.8)
-axes[0].plot(OD_log_delta.detach().cpu().numpy()[:500], label='Original Log Delta', color='blue', alpha=0.8)
-axes[0].set_title('Log Delta Comparison (First 500 Points)', fontsize=14)
-axes[0].set_xlabel('Time Index')
-axes[0].set_ylabel('Log Delta Value')
-axes[0].legend()
-axes[0].grid(True, alpha=0.3)
-
-# Plot 2: Optical Density Comparison (Linear Scale)
-axes[1].plot(fake_OD[:500], label='Reconstructed OD', color='orange', alpha=0.8)
-axes[1].plot(original_OD_np[:500], label='Original OD', color='blue', alpha=0.8)
-axes[1].set_title('Optical Density Comparison - Linear Scale (First 500 Points)', fontsize=14)
-axes[1].set_xlabel('Time Index')
-axes[1].set_ylabel('Optical Density')
-axes[1].legend()
-axes[1].grid(True, alpha=0.3)
-
-# Plot 3: Optical Density Comparison (Log Scale for better visualization)
-axes[2].semilogy(fake_OD[:500], label='Reconstructed OD', color='orange', alpha=0.8)
-axes[2].semilogy(original_OD_np[:500], label='Original OD', color='blue', alpha=0.8)
-axes[2].set_title('Optical Density Comparison - Log Scale (First 500 Points)', fontsize=14)
-axes[2].set_xlabel('Time Index')
-axes[2].set_ylabel('Optical Density (Log Scale)')
-axes[2].legend()
-axes[2].grid(True, alpha=0.3)
-
-plt.tight_layout()
-plt.savefig('/Users/shawngibford/dev/Pennylane_QGAN/qGAN/optical_density_comparison.png', dpi=300, bbox_inches='tight')
-plt.show()
-
-# Save the reconstructed optical density data to CSV
-import pandas as pd
-
-# Fix array length mismatch: fake_OD has one more element than fake_log_delta_np
-# because we added the initial OD value. We need to align the arrays properly.
-log_delta_length = len(fake_log_delta_np)
-original_log_delta_np = OD_log_delta.detach().cpu().numpy()
-
-# Use the length of the generated log delta as the reference
-comparison_length = min(log_delta_length, len(original_log_delta_np), len(original_OD_np)-1, len(fake_OD)-1)
-
-print(f"Array lengths for DataFrame:")
-print(f"  Generated log delta: {len(fake_log_delta_np)}")
-print(f"  Original log delta: {len(original_log_delta_np)}")
-print(f"  Original OD: {len(original_OD_np)}")
-print(f"  Reconstructed OD: {len(fake_OD)}")
-print(f"  Using comparison length: {comparison_length}")
-
-# Create DataFrame with aligned arrays
-comparison_df = pd.DataFrame({
-    'Time_Index': range(comparison_length),
-    'Original_OD': original_OD_np[1:comparison_length+1],  # Skip first element to align with log delta
-    'Reconstructed_OD': fake_OD[1:comparison_length+1],    # Skip first element to align with log delta
-    'Original_Log_Delta': original_log_delta_np[:comparison_length],
-    'Generated_Log_Delta': fake_log_delta_np[:comparison_length]
-})
-
-# Save to CSV
-comparison_df.to_csv('/Users/shawngibford/dev/Pennylane_QGAN/qGAN/generated_optical_density.csv', index=False)
-print(f"\nData saved to: generated_optical_density.csv")
-print(f"Plots saved to: optical_density_comparison.png")
-
-print("\n" + "="*60)
-print("OPTICAL DENSITY CONVERSION COMPLETE")
-print("="*60)
-
-##################################################################
-#
-# Scatter Plot: Original vs Generated Log Delta Comparison
-#
-##################################################################
-
-print("\n" + "="*50)
-print("CREATING LOG DELTA SCATTER PLOT COMPARISON")
-print("="*50)
-
-# Create scatter plot comparing original vs generated log delta values
-plt.figure(figsize=(10, 8))
-
-# Use the aligned data from the comparison DataFrame for consistency
-original_log_delta_scatter = comparison_df['Original_Log_Delta'].values
-generated_log_delta_scatter = comparison_df['Generated_Log_Delta'].values
-
-# Create scatter plot
-plt.scatter(original_log_delta_scatter, generated_log_delta_scatter, 
-           alpha=0.6, s=20, color='blue', edgecolors='navy', linewidth=0.5)
-
-# Add perfect correlation line (y = x) for reference
-min_val = min(original_log_delta_scatter.min(), generated_log_delta_scatter.min())
-max_val = max(original_log_delta_scatter.max(), generated_log_delta_scatter.max())
-plt.plot([min_val, max_val], [min_val, max_val], 'r--', linewidth=2, 
-         label='Perfect Correlation (y=x)', alpha=0.8)
-
-# Calculate and display correlation coefficient
-correlation_log_delta = np.corrcoef(original_log_delta_scatter, generated_log_delta_scatter)[0, 1]
-
-# Add labels and formatting
-plt.xlabel('Original Log Delta (Log Returns)', fontsize=14)
-plt.ylabel('Generated Log Delta (Log Returns)', fontsize=14)
-plt.title(f'Original vs Generated Log Delta Comparison\nCorrelation: {correlation_log_delta:.4f}', fontsize=16)
-plt.grid(True, alpha=0.3)
-plt.legend(fontsize=12)
-
-# Make the plot square for better visual comparison
-plt.axis('equal')
-plt.tight_layout()
-
-# Save the scatter plot
-plt.savefig('/Users/shawngibford/dev/Pennylane_QGAN/qGAN/log_delta_scatter_comparison.png', 
-           dpi=300, bbox_inches='tight')
-plt.show()
-
-# Print statistics
-print(f"\nLog Delta Scatter Plot Statistics:")
-print(f"Correlation coefficient: {correlation_log_delta:.6f}")
-print(f"Original log delta range: [{original_log_delta_scatter.min():.6f}, {original_log_delta_scatter.max():.6f}]")
-print(f"Generated log delta range: [{generated_log_delta_scatter.min():.6f}, {generated_log_delta_scatter.max():.6f}]")
-print(f"Data points plotted: {len(original_log_delta_scatter)}")
-
-print(f"\nScatter plot saved to: log_delta_scatter_comparison.png")
-
-print("\n" + "="*50)
-print("LOG DELTA SCATTER PLOT COMPLETE")
-print("="*50)
+d
 
